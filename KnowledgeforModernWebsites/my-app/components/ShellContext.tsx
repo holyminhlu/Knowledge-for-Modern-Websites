@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { usePathname } from "next/navigation";
 
 type ShellContextValue = {
   sidebarOpen: boolean;
@@ -11,13 +12,20 @@ type ShellContextValue = {
 const ShellContext = createContext<ShellContextValue | null>(null);
 
 export function ShellProvider({ children }: { children: React.ReactNode }) {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const pathname = usePathname();
 
   useEffect(() => {
-    // Mobile default: đóng menu để nội dung rộng rãi hơn.
-    // Desktop default: mở menu.
-    setSidebarOpen(window.matchMedia("(min-width: 768px)").matches);
+    // Luôn mặc định đóng menu khi load/reload.
+    setSidebarOpen(false);
   }, []);
+
+  useEffect(() => {
+    // Khi về trang chủ (bấm logo hoặc điều hướng về /), đóng menu.
+    if (pathname === "/") {
+      setSidebarOpen(false);
+    }
+  }, [pathname]);
 
   const value = useMemo<ShellContextValue>(() => {
     return {

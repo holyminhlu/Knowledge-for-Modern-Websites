@@ -19,7 +19,11 @@ export default function SidebarNav() {
     >
       <div className="sticky top-0 -mx-4 mb-4 border-b border-foreground/10 bg-background/95 px-4 pb-3 pt-2 backdrop-blur md:hidden">
         <div className="flex items-center justify-between gap-3">
-          <Link href="/" className="min-w-0">
+          <Link
+            href="/"
+            onClick={() => setSidebarOpen(false)}
+            className="min-w-0"
+          >
             <div className="truncate text-base font-semibold tracking-tight">
               {KMW_SITE.name}
             </div>
@@ -43,7 +47,7 @@ export default function SidebarNav() {
       </div>
 
       <div className="mb-4">
-        <Link href="/" className="block">
+        <Link href="/" onClick={() => setSidebarOpen(false)} className="block">
           <div className="text-lg font-semibold tracking-tight">{KMW_SITE.name}</div>
           <div className="text-sm text-foreground/70">{KMW_SITE.fullName}</div>
         </Link>
