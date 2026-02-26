@@ -1,34 +1,292 @@
-# JSON Web Token (JWT)
+# JSON Web Token (JWT) trong lập trình web (tất tần tật, thực chiến)
 
-## 1. Khái niệm (What is JWT?)
-**JSON Web Token (mã JWT)** là một chuỗi ký tự chuẩn mở (RFC 7519) dùng để trao đổi thông tin (claims) một cách an toàn và nhỏ gọn giữa hai hoặc nhiều bên (thường là giữa Client bên Frontend và Server bên Backend). 
-JWT được tạo ra để giải quyết bài toán Xác thực (Authentication) và Ủy quyền (Authorization) trong các hệ thống Web hiện đại, đặc biệt là theo kiến trúc Stateless (Không lưu trữ trạng thái REST API).
+## 1) JWT là gì?
 
-## 2. Cấu trúc của một Token JWT
-Một chuỗi JWT nhìn như một dải chữ mã hóa loằng ngoằng. Nhưng thực chất nó được ghép lại bởi 3 phần bị mã hóa Base64 và phân cách nhau bằng 2 dấu chấm `.`.
+**JWT (JSON Web Token)** là một chuẩn (RFC 7519) để biểu diễn một “token” dạng chuỗi, chứa các **claims** (thông tin/khẳng định) được **ký số (signed)** để bên nhận có thể kiểm tra tính toàn vẹn và tính xác thực.
 
-Cấu trúc: `Header.Payload.Signature`
+JWT rất hay dùng để:
 
-- **Header (Phần đầu):** Loại thẻ (luôn là "JWT") & Thuật toán mã hóa để tạo chữ ký (phổ biến nhất là HMAC SHA256 - ghi là `HS256`, hoặc thuật toán khóa bất đối xứng `RS256`).
-- **Payload (Phần thân):** Chứa các thông tin cốt lõi truyền tải (gọi là "Claims"). Ví dụ: `{ "userId": 1, "role": "admin", "exp": 1700000000 }`. 
-  - (Cực kì lưu ý: Phần này CHỈ BỊ MÃ HÓA BASE64 CHỨ KHÔNG ĐƯỢC MÃ HÓA BẢO MẬT. Bất kỳ ai copy token ném lên trang jwt.io đều giải mã đọc được JSON ở trong. Tuyệt đối không nhét Password hay số thẻ tín dụng vào Payload).
-- **Signature (Chữ ký):** Linh hồn của JWT. Server ghép mã Base64 của `Header`, mã Base64 của `Payload`, và phang vào phương thức cắt băm bí mật kết hợp với một chuỗi `SECRET_KEY` (Chỉ Server được biết). Tạo ra chốt chặn an toàn: Dù Hacker đọc được Payload nhưng hễ đổi số bên trong Payload ("userId" = 2) thì chữ ký sẽ vỡ/sai lệch ngay lập tức và Server sẽ đuổi cổ cái token đó đi vì biết token bị giả mạo.
+- **Access token** trong OAuth2/OpenID Connect
+- Session “stateless” (không lưu session server-side) cho API
+- Trao đổi identity giữa các service (service-to-service)
 
-## 3. Quá trình hoạt động cơ bản (Workflow)
-1. **Login:** Người dùng gửi `Username` + `Password` lên API đăng nhập.
-2. **Ký Token:** Server nhận thấy đúng mật khẩu, liền gom thông tin về userId, chức vụ (role) đóng gói vào Payload, tạo ra chữ ký bằng Secret Key và nhồi thành cục chuỗi `eyJh...` rồi trả ngược chuỗi này về Frontend.
-3. **Lưu trữ:** Frontend nhận Token, thường cất vào `LocalStorage`, `SessionStorage` hoặc `Cookies`.
-4. **Sử dụng:** Những lần sau gọi API xin thông tin cá nhân, thay vì truyền mật khẩu, Frontend tự nhét token vào thẻ HTTP Header: `Authorization: Bearer <token_gửi_đến>`.
-5. **Xác thực:** Server nhận Request, tháo chữ ký ra kiểm tra xem khớp Secret Key không, xem Token này còn Hạn sử dụng (Expiration / exp) chưa. Nếu hợp lệ, nhả data cho User coi.
+Điểm cực quan trọng:
 
-## 4. Ưu điểm của JWT
-- **Stateless (Vô trạng thái):** Đây là ưu điểm mạnh cỡ nổ vũ trụ so với kỹ thuật dùng Session Cookies thời cổ đại. Web Server hoàn toàn "mất trí nhớ", không cần lưu giữ thông tin session hay query xuống Database để tra soát xem session còn sống không. Server chỉ cần toán học "Mày chìa cái Token ra tao xoay chữ ký là biết mày hợp lệ, tao giải nén lấy luôn User-ID khỏi mất công chọc vào DB truy vấn id".
-- **Tuyệt vời cho Microservices và khả năng Scale chéo:** Server A phát hành JWT. Máy chủ cụm thứ 5 là Server Z nhận được cái token đó, miễn là 2 máy chủ xài chung `SECRET_KEY`, máy chủ Z tin tưởng Token đó. Chống ngắt quãng Session khi bạn scale ngang 100 máy chủ (Horizontal Scaling).
-- **Gọn nhẹ dễ dàng truyền tải:** Chạy trên Header HTTP hoặc truyền qua URL rất thoải mái, dùng chung cho cả Web và Mobile App.
+- JWT **thường là ký (JWS)**, **không phải mã hoá**.
+- Nội dung JWT có thể **đọc được** (base64url). Đừng nhét bí mật/PII nhạy cảm vào JWT nếu không mã hoá.
 
-## 5. Nhược điểm và Cách khắc phục thiết yếu
-- **Không tự Thu hồi (Revoke) được:** Khi cấp cái thẻ căn cước (JWT) ra rồi và bảo "Token này hạn 3 tiếng nữa chết", thì nếu lỡ User phát hiện bị lộ token ra mạng, Server hoàn toàn VÔ PHƯƠNG KẾU CỨU hủy được chiếc token đó từ phe mình trước 3 tiếng. 
--> *Cách fix (Hạ cấp tính năng JWT):* Xây một bảng Blacklist trên Redis, mỗi lần nhận Token bắt buộc vào Redis tra xem nó có bị chặn không. (Việc này vô tình biến JWT thành Stateless nửa mùa, quay về nhược điểm tra cứu Session cũ).
-- **Không thể thay đổi dữ liệu Real-time (Payload Stale):** Server thu quyền admin của User A về quy chuẩn người thường. Sáng mai anh ta mới mất chức. Nhưng nếu anh ta đang cầm cái JWT rành rành báo `role: "admin"` và hạn là 1 tháng... anh ta có quyền xài cái thẻ giả mạo đó tới hết tháng.
--> *Cách fix:* Thời hạn Expired bắt buộc phải để cực kỳ cực kỳ siêu cấp ngắn (VD: 10 đến 15 phút), ghép cặp theo mô hình `Access Token & Refresh Token` để Server liên tục được ép xin chữ ký token mới và update quyền liên tục.
-- **Kích thước to dần:** Càng nhét nhiều User Data, JSON To lên, chuỗi Token dài ra theo hàm Log. Mỗi request đều cõng 1 cục Header 2-3KB rất tốn băng thông. Tránh nhét quá 3-4 trường vào đó.
+## 2) JWT hoạt động như thế nào?
+
+### 2.1 Cấu trúc JWT
+
+JWT có dạng:
+
+`header.payload.signature`
+
+- **Header**: thuật toán ký (`alg`), type (`typ`)
+- **Payload**: claims (thông tin)
+- **Signature**: chữ ký để verify
+
+Ví dụ (dạng JSON, minh hoạ):
+
+Header:
+
+```json
+{ "alg": "RS256", "typ": "JWT", "kid": "key-1" }
+```
+
+Payload:
+
+```json
+{
+  "sub": "user_123",
+  "iss": "https://auth.example.com",
+  "aud": "api://my-service",
+  "exp": 1700000000,
+  "iat": 1699996400,
+  "scope": "read:orders write:orders"
+}
+```
+
+### 2.2 Ký và verify
+
+- Server/IdP ký JWT bằng secret/private key.
+- API verify chữ ký bằng secret/public key.
+
+JWT giúp API tin rằng:
+
+- Token do “issuer” hợp lệ phát hành
+- Payload không bị sửa
+
+Nhưng JWT **không tự động** đảm bảo:
+
+- Token chưa bị đánh cắp
+- Token còn hợp lệ về mặt business (user bị ban, quyền bị đổi…)
+
+## 3) JWT không phải là gì?
+
+- JWT **không phải encryption** (mặc định ai cũng đọc được payload).
+- JWT **không thay thế** hoàn toàn session truyền thống trong mọi trường hợp.
+- JWT **không tự giải quyết** revoke/đăng xuất ngay lập tức.
+
+## 4) Thuật toán ký: HS256 vs RS256/ES256
+
+### 4.1 HS256 (HMAC – symmetric key)
+
+- Producer và verifier dùng **cùng một secret**.
+- Dễ triển khai.
+- Rủi ro:
+  - Nếu nhiều service cùng verify, secret phải chia sẻ rộng → tăng blast radius.
+  - Lộ secret = giả mạo token.
+
+### 4.2 RS256 (RSA – asymmetric)
+
+- Ký bằng **private key**, verify bằng **public key**.
+- Phù hợp kiến trúc microservices: chỉ IdP giữ private key.
+
+### 4.3 ES256 (ECDSA – asymmetric)
+
+- Tương tự RS256 nhưng key nhỏ hơn, nhanh hơn trong nhiều trường hợp.
+- Triển khai cần thư viện hỗ trợ tốt và quản lý key đúng.
+
+Khuyến nghị thực dụng:
+
+- Hệ nhiều service: ưu tiên **RS256/ES256**.
+- Hệ đơn giản (monolith) có thể HS256, nhưng quản lý secret phải chặt.
+
+## 5) Các claims chuẩn và claims tuỳ biến
+
+### 5.1 Registered claims (hay dùng)
+
+- `iss` (issuer): ai phát hành
+- `sub` (subject): định danh user/principal
+- `aud` (audience): token dành cho ai (API nào)
+- `exp` (expiry): hết hạn
+- `nbf` (not before): chưa có hiệu lực trước thời điểm này
+- `iat` (issued at)
+- `jti` (JWT ID): định danh token (hữu ích cho revoke/trace)
+
+### 5.2 Custom claims
+
+- Có thể thêm `orgId`, `roles`, `permissions`, `tenant`, `mfa`…
+
+Nhưng cần cân nhắc:
+
+- Token phình to → tăng băng thông
+- Claim đổi thường xuyên → token nhanh stale
+- Claim nhạy cảm → không nên để trong JWT (trừ khi JWE)
+
+## 6) Validate JWT đúng cách (checklist bắt buộc)
+
+Khi API nhận JWT, tối thiểu cần:
+
+- Verify chữ ký
+- Check `exp` (và chấp nhận clock skew nhỏ)
+- Check `iss`
+- Check `aud` (đúng audience của service)
+- Check `nbf`/`iat` (nếu dùng)
+- Check `alg` hợp lệ (đừng chấp nhận tuỳ tiện)
+- Nếu dùng `kid`, phải lấy đúng public key tương ứng (JWKS)
+
+Sai lầm phổ biến:
+
+- Không check `aud` → token của app khác dùng được
+- Chấp nhận `alg=none` hoặc “algorithm confusion” do config sai
+
+## 7) JWT và Session: nên dùng khi nào?
+
+### 7.1 JWT phù hợp khi
+
+- API stateless, nhiều instance
+- Microservices cần verify token độc lập
+- Bạn dùng OAuth2/OIDC chuẩn
+
+### 7.2 Session cookie (server-side session) phù hợp khi
+
+- Web app truyền thống SSR
+- Cần revoke tức thì, quản trị session mạnh
+- Bạn muốn giảm rủi ro token bị lộ dài hạn
+
+Thực tế: nhiều hệ dùng **cookie session** cho web + **JWT** cho API/m2m.
+
+## 8) Lưu trữ JWT ở client: cookie vs localStorage (SPA/web)
+
+### 8.1 LocalStorage / sessionStorage
+
+- Ưu: đơn giản.
+- Nhược: dễ bị lấy nếu bị **XSS**.
+
+### 8.2 HttpOnly Secure Cookie
+
+- Ưu: chống đọc bằng JS (giảm rủi ro XSS lấy token).
+- Nhược: cần chống **CSRF** (SameSite, CSRF token, origin checks).
+
+Khuyến nghị thực dụng cho SPA:
+
+- Access token ngắn hạn.
+- Refresh token để trong **HttpOnly cookie** (hoặc storage an toàn trên mobile).
+- API có thể dùng cookie hoặc bearer tuỳ kiến trúc; nếu dùng cookie cần CSRF defenses.
+
+## 9) Access token vs Refresh token (liên quan chặt với JWT)
+
+- **Access token**: sống ngắn (vài phút đến ~1h), dùng gọi API.
+- **Refresh token**: sống dài hơn (ngày/tuần), dùng để lấy access token mới.
+
+Best practices:
+
+- Access token **ngắn hạn** để giảm thiệt hại khi bị lộ.
+- Refresh token nên có:
+  - **rotation** (mỗi lần refresh cấp refresh token mới)
+  - phát hiện reuse (reuse detection)
+  - lưu server-side (opaque) hoặc dạng JWT nhưng quản lý chặt
+
+## 10) Revocation và logout (điểm yếu kinh điển của JWT)
+
+JWT stateless → khó “thu hồi ngay” nếu chỉ dựa vào `exp`.
+
+Các cách xử lý:
+
+- **Short-lived access token** + refresh token rotation (phổ biến nhất)
+- **Blacklist/denylist** theo `jti` (tốn state, cần cache phân tán)
+- **Key rotation** (thu hồi hàng loạt): đổi key → token cũ không verify được
+- “Session-based” cho web nhạy cảm: dùng session ID thay JWT
+
+Không có giải pháp duy nhất đúng; chọn theo risk/UX.
+
+## 11) JWT trong microservices
+
+Mô hình thường gặp:
+
+- Một Identity Provider (Auth service) phát JWT
+- Các service verify bằng public key (JWKS)
+
+Lưu ý:
+
+- Không nên “tự mint JWT” ở mọi service.
+- Nếu cần “service identity”, dùng client credentials flow (OAuth2) hoặc mTLS.
+
+## 12) JWT và OAuth2/OIDC (đừng nhầm lẫn)
+
+- **OAuth2** là framework cấp quyền (authorization), không định nghĩa token phải là JWT.
+- **OIDC** thêm lớp identity (id_token thường là JWT).
+- Nhiều hệ dùng JWT làm access token, nhưng access token có thể là opaque.
+
+Nếu bạn dùng OAuth2/OIDC, hãy tuân theo khuyến nghị của provider (Auth0/Keycloak/Cognito…).
+
+## 13) Bảo mật: các rủi ro và cách phòng
+
+### 13.1 XSS
+
+- Nếu access token nằm trong JS-accessible storage → XSS có thể lấy.
+- Phòng:
+  - CSP nghiêm
+  - sanitize
+  - tránh inline script
+  - cân nhắc cookie HttpOnly cho refresh token
+
+### 13.2 CSRF (khi dùng cookie)
+
+- Nếu bạn dùng cookie để auth, request cross-site có thể kèm cookie.
+- Phòng:
+  - `SameSite=Lax/Strict` (tuỳ UX)
+  - CSRF token
+  - kiểm tra `Origin/Referer`
+
+### 13.3 Token leakage qua URL/log
+
+- Tránh truyền JWT qua query string.
+- Không log Authorization header.
+
+### 13.4 Audience/issuer misconfiguration
+
+- Luôn verify `iss`/`aud`.
+- Mỗi service có audience riêng.
+
+### 13.5 Key management
+
+- Bảo vệ private key (HSM/KMS nếu cần).
+- Rotate keys định kỳ.
+- Dùng `kid` + JWKS để phân phối public keys.
+
+## 14) Thiết kế claims “đủ dùng” (không nhồi quá)
+
+Nguyên tắc:
+
+- JWT nên là “chứng minh identity + vài quyền coarse-grained” (role/scope).
+- Fine-grained authorization (ABAC) nên dựa trên DB/PDP ở server.
+
+Ví dụ:
+
+- Đưa `orgId` vào token để chặn cross-tenant nhanh.
+- Không đưa cả danh sách permissions động dài vào token nếu thay đổi thường xuyên.
+
+## 15) Observability và audit
+
+- Log `sub`, `iss`, `aud`, `jti` (nếu có) và `requestId/traceId`.
+- Tránh log toàn bộ token.
+- Theo dõi:
+  - tỉ lệ 401/403
+  - token expired rate
+  - refresh rate (bất thường có thể là token theft)
+
+## 16) Anti-patterns (lỗi hay gặp)
+
+- Nhầm “JWT = encryption”, nhét dữ liệu nhạy cảm vào payload
+- Access token sống quá lâu (1 ngày/1 tuần) cho SPA
+- Không check `aud`/`iss`
+- Dùng HS256 trong microservices rồi share secret khắp nơi
+- Logout nhưng không có revoke strategy (user vẫn dùng token cũ đến hết hạn)
+- Truyền token qua query string hoặc lưu ở localStorage mà không có CSP
+
+## 17) Checklist production (tóm tắt)
+
+- Chọn thuật toán phù hợp (ưu tiên asymmetric cho nhiều service)
+- Validate đầy đủ: signature + exp + iss + aud + alg
+- Access token ngắn hạn + refresh token rotation
+- Lưu trữ token an toàn (HttpOnly cookie cho refresh, chống CSRF/XSS)
+- Key rotation + JWKS + quản lý `kid`
+- Logging/audit đúng (không log token)
+
+---
+
+Nếu bạn muốn, mình có thể viết thêm một mục “JWT cho SPA vs Mobile vs Server-rendered” (3 chiến lược lưu trữ/refresh khác nhau) để bạn chọn nhanh theo loại ứng dụng.

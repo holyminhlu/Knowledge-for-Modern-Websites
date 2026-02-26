@@ -1,47 +1,263 @@
-# Role-Based Access Control (RBAC) - Kiểm soát truy cập dựa trên vai trò
+# RBAC (Role-Based Access Control) trong lập trình web (tất tần tật)
 
-## 1. Khái niệm (What is RBAC?)
-**Role-Based Access Control (RBAC)** là một phương pháp quản lý quyền truy cập cực kỳ phổ biến trong các hệ thống phần mềm và mạng doanh nghiệp. Thay vì cấp quyền trực tiếp lẻ tẻ cho từng cá nhân người dùng (User), hệ thống sẽ gán quyền (Permissions) cho các "Vai trò" (Roles) cụ thể. Sau đó, người dùng sẽ được gán vào các vai trò đó để kế thừa những quyền tương ứng.
+## 1) RBAC là gì?
 
-Ví dụ: Bạn đi làm ở công ty, thay vì bảo vệ và IT phải nhớ cấp cho nhân viên Nguyễn Văn A từng thẻ mở cửa phòng Server, thẻ kho, quyền xem mã nguồn, quyền sửa doanh thu... Họ chỉ việc gán Nguyễn Văn A vào chức vụ (Role) là `Kế Toán` hoặc `Lập trình viên`. Mọi quyền lợi đã được quy định sẵn trong chức vụ đó.
+**RBAC** là mô hình phân quyền trong đó quyền truy cập được gán cho **Role (vai trò)**, và user được gán role. Khi user thực hiện một action, hệ thống kiểm tra role của user có quyền tương ứng hay không.
 
-## 2. Các thành phần cốt lõi của RBAC
-Mô hình RBAC chuẩn (như NIST RBAC) bao gồm 3 thực thể chính kết nối với nhau:
+Mục tiêu:
 
-1. **User (Người dùng):** Thực thể con người hoặc hệ thống tự động đăng nhập vào ứng dụng (VD: `John`, `Admin_01`).
-2. **Role (Vai trò):** Một nhóm logic định nghĩa chức năng công việc hoặc thẩm quyền (VD: `Admin`, `Editor`, `Viewer`, `Manager`).
-3. **Permission / Privilege (Quyền hạn):** Những hành động được phép thực hiện trên các tài nguyên cụ thể (VD: `read:article`, `write:article`, `delete:article`, `view:financial_report`).
+- Quản lý quyền **dễ hiểu, dễ vận hành**
+- Hạn chế “ai cũng admin”
+- Áp dụng nguyên tắc **least privilege**
 
-### Mối quan hệ giữa các thành phần (Chìa khóa của RBAC)
-- **Many-to-Many giữa (Role) và (Permission):** Một Role có thể chứa nhiều Permission (Role `Editor` có quyền `read` và `write`). Và ngược lại, một Permission có thể thuộc về nhiều Role khác nhau (Quyền `read` nằm ở cả Role `Viewer` lẫn `Editor`).
-- **Many-to-Many giữa (User) và (Role):** Một User có thể kiêm nhiệm nhiều Role cùng lúc (VD: Ông sếp vừa là `Manager` vừa là `Admin`). Một Role sẽ có nhiều User cùng chung quyền hạn. 
+RBAC đặc biệt hợp với web app doanh nghiệp:
 
-*(Tuyệt đối không có mối quan hệ trực tiếp kết nối từ User thẳng đến Permission trong thiết kế Database của RBAC thuần túy).*
+- Tổ chức có chức danh rõ (admin, manager, staff, viewer)
+- Quyền ổn định, ít điều kiện theo ngữ cảnh
 
-## 3. Ưu điểm của RBAC
-- **Dễ dàng quản lý ở quy mô lớn:** Khi công ty có hàng nghìn nhân viên, việc nhân sự mới vào làm (Onboarding) hay nghỉ việc (Offboarding) chỉ tốn vài cú click dán nhãn / gỡ nhãn Role là xong, không phải đi thu hồi hay cấp lẻ từng quyền một.
-- **Tuân thủ Principle of Least Privilege (Quyền hạn tối thiểu):** Giúp tổ chức giới hạn chặt chẽ quyền, không ai có quyền vượt quá vai trò công việc của mình. Tránh việc một User bị tích tụ quyền (permission creep) theo thời gian dài làm việc.
-- **Tính trích xuất và Audit (Kiểm tra) dễ dàng:** Rất dễ trả lời các tiêu chuẩn bảo mật ISO hoặc SOC2 khi thanh tra hỏi "Những ai trong công ty đang có quyền Xóa database?". Chỉ cần tra xem Role nào chứa quyền Xóa Database và liệt kê danh sách Users trong Role đó.
+## 2) Role vs Permission (đừng nhầm)
 
-## 4. Thiết kế Database cơ bản cho RBAC (Relational DB)
-Cần ít nhất 5 bảng (Tables) để thực hiện RBAC tiêu chuẩn:
+### 2.1 Permission là gì?
 
-1. **`users`** (id, username, password...)
-2. **`roles`** (id, role_name, description)
-3. **`permissions`** (id, permission_name, resource)
-4. **`user_roles`** (user_id, role_id) -> Bảng trung gian (Pivot table)
-5. **`role_permissions`** (role_id, permission_id) -> Bảng trung gian (Pivot table)
+**Permission** là quyền thực hiện một hành động cụ thể trên một loại tài nguyên.
 
-## 5. Phân loại các cấp độ RBAC
-- **Core RBAC:** Phiên bản cơ bản truyền thống (như mô tả ở trên).
-- **Hierarchical RBAC (RBAC Phân cấp):** Các Role có tính kế thừa nhau theo mô hình cây. Ví dụ: Role `Senior Admin` sẽ tự động kế thừa (bao trùm) mọi quyền của Role `Junior Admin` mà không cần gán lại bảng ánh xạ.
-- **Constrained RBAC (RBAC Ràng buộc):** Bổ sung khái niệm Seperation of Duties (Phân tách Trách nhiệm). Ngăn chặn một User độc chiếm các Role gây xung đột lợi ích (VD: Một người không thể vừa giữ Role `Người duyệt chi tiền` vừa giữ Role `Người đề xuất chi tiền` trong cùng 1 phiên làm việc để chống gian lận).
+Ví dụ:
 
-## 6. Nhược điểm và Sự giới hạn (Khi nào không nên dùng RBAC?)
-Từ những năm gầy đây, khi logic doanh nghiệp phức tạp hơn, RBAC bắt đầu bộc lộ điểm yếu: **Hiện tượng "Bùng nổ Role" (Role Explosion).**
-Ví dụ: Bạn muốn cấp quyền: "Người dùng có Role là Manager chỉ được phép Sửa bài viết, **NHƯNG** chỉ được sửa vào giờ hành chính, và chỉ sửa bài do chính họ tạo ra ở chi nhánh Hà Nội". 
+- `order.read`
+- `order.refund`
+- `user.invite`
+- `invoice.export`
 
-RBAC thuần túy sẽ bất lực vì nó chỉ trả lời được câu hỏi "Mày là Ai?" (Role) chứ không quan tâm đến "Ngữ cảnh / Trạng thái xung quanh là gì?". 
-Nếu ráng dùng RBAC, người ta sẽ phải đẻ ra hàng trăm Role dị dạng như: `Manager_Hanoi_Day_SelfEdit`, `Manager_HCM_Night_SelfEdit`... dẫn đến rác hệ thống.
+### 2.2 Role là gì?
 
-👉 **Giải pháp thay thế/nâng cấp:** Khi gặp tình huống kịch bản ngữ cảnh (Context-aware) phức tạp nêu trên, các hệ thống lớn (AWS IAM, Kubernetes) sẽ dịch chuyển sang dùng mô hình **ABAC (Attribute-Based Access Control)** hoặc **PBAC (Policy-Based Access Control)** để bổ sung các luồng if/else biến số linh hoạt hơn dựa trên thuộc tính của tài nguyên, môi trường thay vì chỉ dựa vào "tên chức vụ" cứng nhắc.
+**Role** là “gói quyền” (bundle of permissions).
+
+Ví dụ:
+
+- `viewer`: `order.read`
+- `staff`: `order.read`, `order.update`
+- `admin`: tất cả quyền quản trị
+
+Khuyến nghị:
+
+- Thiết kế permission theo **nghiệp vụ**, không chỉ theo HTTP verbs.
+- Role chỉ là tập hợp permission để dễ gán và quản lý.
+
+## 3) RBAC models (RBAC0/1/2/3) – hiểu theo mức độ
+
+Các biến thể hay nhắc:
+
+- **RBAC0**: core RBAC (user-role, role-permission)
+- **RBAC1**: role hierarchy (role cha kế thừa quyền role con)
+- **RBAC2**: constraints (ràng buộc như separation of duty)
+- **RBAC3**: RBAC1 + RBAC2
+
+Trong web app, bạn thường gặp:
+
+- Hierarchy: `admin` ⟶ `manager` ⟶ `staff` ⟶ `viewer`
+- Constraints: “người tạo không được duyệt” (SoD)
+
+## 4) RBAC trong hệ multi-tenant (rất quan trọng)
+
+Trong SaaS, user thuộc **tenant/org** khác nhau.
+
+Bạn cần quyết định role “scoped” như thế nào:
+
+- Role theo tenant: user có role trong từng org khác nhau
+- Role theo project/team trong org
+
+Ví dụ:
+
+- User A là `admin` của Org1 nhưng chỉ là `viewer` của Org2.
+
+Do đó, quan hệ thường là:
+
+- `User` —(membership)→ `Org` —(role)→ `Role`
+
+Không nên:
+
+- Gán `role=admin` global cho user nếu quyền thực tế phụ thuộc tenant.
+
+## 5) Thiết kế permission và naming convention
+
+Một cách đặt tên dễ scale:
+
+- `resource.action` hoặc `domain.resource.action`
+- Ví dụ: `billing.invoice.export`, `support.ticket.assign`
+
+Nhóm quyền theo module để dễ filter trong admin UI.
+
+Tránh:
+
+- Permission mơ hồ như `manage_all`
+- Permission theo route cụ thể (dễ drift khi refactor routes)
+
+## 6) Data model (DB schema) điển hình
+
+### 6.1 Schema cơ bản
+
+- `users`
+- `roles`
+- `permissions`
+- `role_permissions` (many-to-many)
+- `user_roles` hoặc `memberships` (tuỳ multi-tenant)
+
+### 6.2 Multi-tenant schema gợi ý
+
+- `orgs`
+- `org_memberships`: (`orgId`, `userId`, `roleId`, `status`...)
+
+Nếu role theo project:
+
+- `projects`
+- `project_memberships`: (`projectId`, `userId`, `roleId`...)
+
+### 6.3 Role hierarchy
+
+Hai cách:
+
+- Lưu `parentRoleId` (tree)
+- Hoặc “expanded permissions” (materialized) để query nhanh
+
+## 7) Enforce RBAC ở đâu?
+
+### 7.1 Ở API Gateway (coarse-grained)
+
+- Chặn theo route và scope đơn giản.
+- Không phù hợp cho resource-level (owner/tenant) trừ khi gateway có đủ context.
+
+### 7.2 Ở Application Service (khuyến nghị cho phần lớn web apps)
+
+- Middleware check permission trước.
+- Với resource-level, service có thể query DB để kiểm tra org/ownership.
+
+### 7.3 Ở Database (Row-Level Security)
+
+- Có thể enforce theo role/tenant.
+- Mạnh nhưng cần cẩn trọng vì debug khó, policy phân tán.
+
+Thực tế thường kết hợp:
+
+- Gateway check auth + scope sơ bộ
+- Service check permission + resource scope
+- DB enforce tenant isolation (nếu cần)
+
+## 8) RBAC “resource-level” và giới hạn của RBAC
+
+RBAC thuần tuý trả lời câu hỏi:
+
+- “Role này có quyền X không?”
+
+Nhưng nhiều bài toán web cần:
+
+- “User có thể sửa **bản ghi cụ thể** này không?”
+
+Ví dụ:
+
+- chỉ sửa order thuộc org mình
+- chỉ sửa ticket thuộc team mình
+
+Giải pháp:
+
+- RBAC cho quyền hành động (`ticket.update`)
+- Kèm thêm điều kiện theo resource (orgId/ownerId/status) → đây là lúc cần **ABAC** hoặc policy checks trong code.
+
+## 9) RBAC và JWT/OAuth2 scopes
+
+### 9.1 Scopes có phải roles không?
+
+- Scope là “phạm vi quyền” trong OAuth2.
+- Role là khái niệm nội bộ của app.
+
+Bạn có thể map:
+
+- Role → scopes
+- hoặc permission → scopes
+
+Nhưng cần nhất quán và tránh nhầm.
+
+### 9.2 Nên nhét role/permission vào token không?
+
+Tuỳ hệ:
+
+- Nếu quyền đổi ít: có thể đưa roles/scopes vào JWT để API check nhanh.
+- Nếu quyền đổi thường xuyên: prefer lookup server-side hoặc token ngắn hạn.
+
+## 10) Admin UI và quản trị quyền
+
+RBAC chỉ hiệu quả khi vận hành dễ:
+
+- Danh sách roles rõ nghĩa
+- Màn hình gán quyền có mô tả permission
+- Có “default roles” (viewer/staff/admin) để onboarding nhanh
+
+Nếu bạn cho phép tạo role custom:
+
+- Cần guardrails (không cho privilege escalation)
+- Có audit log thay đổi role/permission
+
+## 11) Constraints: Separation of Duties (SoD)
+
+Một số quy tắc hay gặp:
+
+- Người tạo request không được duyệt request
+- Finance không được tự approve khoản vượt hạn mức
+
+RBAC2 giải quyết bằng constraints, nhưng trong web app thường implement bằng rule trong code/policy engine.
+
+## 12) Hiệu năng: caching và precompute
+
+Các cách tối ưu:
+
+- Cache permissions theo user-session (in-memory/Redis)
+- Materialize “effective permissions” để check nhanh
+- Invalidate cache khi role/permission thay đổi
+
+Chú ý:
+
+- Cache quá lâu có thể gây “quyền đã bị thu hồi nhưng vẫn còn hiệu lực”.
+- Token ngắn hạn + refresh rotation giúp giảm rủi ro stale.
+
+## 13) Audit, logging và compliance
+
+Nên audit:
+
+- ai gán role cho ai
+- ai thay đổi role/permission
+- ai thực hiện hành động nhạy cảm (kèm permission)
+
+Log gợi ý:
+
+- `userId`, `orgId`, `action`, `resourceType`, `resourceId`, `decision` (allow/deny)
+- `policyVersion` hoặc `rolesSnapshot`
+
+## 14) Testing RBAC
+
+- Unit test mapping role → permissions
+- Integration test endpoints:
+  - viewer bị 403 ở `write`
+  - staff được 200 ở `update`
+- Test multi-tenant isolation: user org A không truy cập org B
+
+## 15) Anti-patterns (lỗi hay gặp)
+
+- Role explosion: tạo quá nhiều role vì cố nhét điều kiện resource/context vào role
+- Gán quyền “admin” để chữa cháy (privilege creep)
+- Không có tenant scoping → lộ dữ liệu cross-tenant
+- Chỉ check role ở UI, không check ở backend
+- Hardcode permissions rải rác, không có source of truth
+- Không audit thay đổi quyền
+
+## 16) Checklist production (tóm tắt)
+
+- Định nghĩa permission theo nghiệp vụ, có naming convention
+- Thiết kế role là bundle permissions, có default roles
+- Multi-tenant: role gắn với membership (org/project)
+- Enforce ở backend (service), không tin UI
+- Thêm layer resource checks (ABAC) khi cần
+- Caching hợp lý + invalidate
+- Audit log + test coverage cho endpoints quan trọng
+
+---
+
+Nếu bạn muốn, mình có thể bổ sung một mục “RBAC + ABAC hybrid” (khi nào dùng, cách tách permission vs attribute rules) và ví dụ data model cho SaaS có org + project + team.

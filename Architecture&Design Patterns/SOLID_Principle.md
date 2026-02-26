@@ -1,205 +1,344 @@
-# SOLID Principles
+---
+title: SOLID Principle trong lập trình web
+description: Handbook production-ready về SOLID (SRP/OCP/LSP/ISP/DIP) áp dụng cho web backend/frontend: định nghĩa, dấu hiệu vi phạm, ví dụ thực tế, cách refactor, và checklist.
+---
 
-SOLID là một bộ 5 nguyên lý thiết kế hướng đối tượng (Object-Oriented Design) nổi tiếng, được giới thiệu bởi Robert C. Martin (Uncle Bob). Mục tiêu của các nguyên lý này là giúp các lập trình viên viết ra những đoạn code dễ đọc, dễ mở rộng, dễ bảo trì và hạn chế tối đa lỗi khi hệ thống phần mềm phình to.
+# SOLID Principle trong lập trình web
 
-Dưới đây là chi tiết về 5 chữ cái biểu đại diện cho 5 nguyên lý trong SOLID.
+## 0) SOLID là gì và vì sao quan trọng trong web?
+
+**SOLID** là bộ 5 nguyên tắc thiết kế hướng đối tượng (OO) giúp code:
+
+- dễ thay đổi khi yêu cầu sản phẩm đổi liên tục
+- dễ test (đặc biệt unit test)
+- ít bug do side-effects/coupling
+- dễ mở rộng team (nhiều người cùng làm mà không “đạp nhau”)
+
+Trong lập trình web, SOLID đặc biệt hữu ích vì:
+
+- backend thường có nhiều integration (DB, cache, queue, payment, email)
+- business rules thay đổi nhanh
+- hệ thống phải vận hành production (observability, resilience)
+
+Lưu ý: SOLID không phải “luật cứng”. Mục tiêu là **giảm rủi ro thay đổi** và **tăng khả năng hiểu/kiểm thử**, không phải tạo abstraction vô hạn.
 
 ---
 
-## 1. S - Single Responsibility Principle (SRP) - Nguyên lý Đơn Trách Nhiệm
+## 1) S — Single Responsibility Principle (SRP)
 
-> **"Một class (hoặc module/function) chỉ nên có một và chỉ một lý do để thay đổi."**
+### 1.1 Định nghĩa
 
-**Giải thích:**
-Mỗi một class chỉ nên chịu trách nhiệm duy nhất cho một phần chức năng (logic) cụ thể của phần mềm. Nếu một class đảm nhận quá nhiều việc, khi bạn thay đổi một chức năng nhỏ nào đó, nó có thể ảnh hưởng gián tiếp đến những phần chức năng khác trong cùng class, dẫn đến lỗi dây chuyền (bug regression).
+> Một module/class/function chỉ nên có **một lý do để thay đổi**.
 
-**Ví dụ (Vi phạm SRP):**
-Một class `User` vừa giữ thông tin người dùng, vừa có logic tính lương, vừa có logic lưu ID người dùng vào cơ sở dữ liệu (Database).
-```typescript
-class User {
-    private name: string;
-    
-    // Trách nhiệm 1: Quản lý thông tin user
-    getName() { return this.name; }
-    
-    // Trách nhiệm 2: Liên quan đến DB (Xấu)
-    saveUserToDatabase() { /* logic kết nối MySQL, SQL Server */ }
-    
-    // Trách nhiệm 3: Logic nghiệp vụ chung (Xấu)
-    calculateSalary() { /* logic tính lương */ }
-}
-```
+Trong web, “một trách nhiệm” thường tương ứng với:
 
-**Cách khắc phục (Tuân thủ SRP):**
-Tách nó ra làm 3 class riêng biệt:
-- `User`: Chỉ chứa Properties.
-- `UserRepository`: Chỉ xử lý lấy dứ liệu và lưu vào database.
-- `PayrollService`: Chỉ tính lương công ty.
+- một use case (CreateOrder)
+- một policy (PasswordPolicy)
+- một adapter cho integration (SendGridEmailSender)
 
----
+### 1.2 Dấu hiệu vi phạm SRP
 
-## 2. O - Open/Closed Principle (OCP) - Nguyên lý Đóng/Mở
+- File/class rất dài, nhiều nhánh if/else theo loại nghiệp vụ.
+- Một thay đổi nhỏ (ví dụ đổi format email) làm phải sửa nhiều chỗ.
+- Unit test khó vì phải mock quá nhiều thứ.
 
-> **"Các thực thể phần mềm (classes, modules, functions...) nên MỞ để mở rộng (Open for extension), nhưng ĐÓNG để sửa đổi (Closed for modification)."**
+Ví dụ thường gặp:
 
-**Giải thích:**
-Khi bạn muốn thêm một tính năng mới cho chương trình, bạn nên mở rộng (viết thêm code mới, class mới) thay vì phải đi mổ xẻ và sửa lại những đoạn code cũ đang chạy ổn định. Sửa lại code cũ cực kỳ dễ tạo ra lỗi.
+- Controller vừa validate, vừa xử lý nghiệp vụ, vừa query DB, vừa gọi external.
+- “God service”: `UserService` làm login, reset password, billing profile, analytics...
 
-**Ví dụ:**
-Giả sử bạn có class tính diện tích:
-```typescript
-// VI PHẠM OCP
-class AreaCalculator {
-    calculate(shape: any) {
-        if (shape.type === 'circle') return Math.PI * shape.radius * shape.radius;
-        if (shape.type === 'square') return shape.length * shape.length;
-        // Nếu thêm hình Tam giác mới, bạn PHẢI sửa trực tiếp file này (Closed modification bị vỡ)
-    }
-}
-```
+### 1.3 Cách áp dụng SRP trong backend web
 
-**Cách khắc phục (Tuân thủ OCP):** Sử dụng Kế thừa (Inheritance) hoặc Interface đa hình (Polymorphism).
-```typescript
-interface Shape {
-    calculateArea(): number;
-}
+- Controller: chỉ parse/validate transport + gọi use case + map response.
+- Use case/service: điều phối nghiệp vụ của một hành động.
+- Repository: chỉ data access.
+- Adapter: chỉ tích hợp hệ thống ngoài (email, payment, storage).
 
-class Circle implements Shape {
-    constructor(private radius: number) {}
-    calculateArea() { return Math.PI * this.radius * this.radius; }
-}
+Ví dụ cấu trúc (khái niệm):
 
-class Square implements Shape { ... }
-class Rectangle implements Shape { ... } // Thoải mái thêm hình mới mà AreaCalculator không quan tâm
+- `CreateOrderHandler` (HTTP)
+- `CreateOrderUseCase`
+- `OrderRepository` (interface)
+- `PostgresOrderRepository` (implementation)
+- `PaymentGateway` (interface)
+- `StripePaymentGateway` (implementation)
 
-class AreaCalculator {
-    calculate(shape: Shape) {
-        return shape.calculateArea(); // Không cần biết đây là hình gì! Nó tự gọi đúng.
-    }
-}
-```
+### 1.4 Cách áp dụng SRP trong frontend
+
+- Component UI chỉ chịu trách nhiệm render/interaction; không ôm cả data fetching phức tạp.
+- Tách: UI component (presentational) vs container/hook (data + state).
+- Tách logic tái sử dụng thành hooks/utilities.
+
+### 1.5 Anti-pattern SRP
+
+- “Tách cho đẹp” nhưng tạo quá nhiều lớp mỏng vô nghĩa.
+- Tách trách nhiệm nhưng vẫn share state/global mutable khiến coupling ẩn.
 
 ---
 
-## 3. L - Liskov Substitution Principle (LSP) - Nguyên lý Thay thế Liskov
+## 2) O — Open/Closed Principle (OCP)
 
-> **"Các đối tượng (objects) của các lớp cha (superclasses) phải có khả năng được thay thế bằng các đối tượng của các lớp con (subclasses) mà không làm hỏng tính đúng đắn của chương trình."**
+### 2.1 Định nghĩa
 
-**Giải thích:**
-Khi bạn kế thừa một class, class con phải KẾ THỪA đúng bản chất tĩnh/chức năng của lớp cha, không được vứt bỏ hoặc bóp méo hành vi mặc định của lớp cha để làm ứng dụng báo lỗi ném Exception nếu ai đó gọi phương thức của cha. Nếu class con không thể thực hiện hành động của cha, thì nó **KHÔNG NÊN** kế thừa.
+> Software entities nên **mở để mở rộng** nhưng **đóng để sửa đổi**.
 
-**Ví dụ kinh điển (Vi phạm LSP): Chim Cánh Cụt biết bay?**
-```typescript
-class Bird {
-    fly() { console.log("I am flying"); }
+Ý nghĩa thực dụng: khi thêm một behaviour mới, bạn nên **thêm code mới** (extension) hơn là sửa nhiều code cũ (modification) — đặc biệt code core/stable.
+
+### 2.2 Dấu hiệu vi phạm OCP
+
+- Mỗi lần thêm “loại mới” là phải sửa một `switch/case` lớn.
+- Một change request tạo ra diff trải khắp codebase.
+
+Ví dụ trong web:
+
+- Thêm payment method mới (PayPal) phải sửa nhiều nơi.
+- Thêm notification channel (SMS) phải sửa code gửi email.
+
+### 2.3 Kỹ thuật áp dụng OCP (thực dụng)
+
+1. **Polymorphism / Strategy**
+
+- Tạo interface `PaymentProvider`.
+- Mỗi provider là một implementation.
+- Chọn provider bằng config/registry.
+
+2. **Composition over inheritance**
+
+- Thay vì kế thừa sâu, compose các behaviour.
+
+3. **Plugin/registry**
+
+- Một nơi đăng ký handlers theo key.
+
+Ví dụ khái niệm (pseudo):
+
+```ts
+interface PaymentProvider {
+	charge(input: ChargeInput): Promise<ChargeResult>
 }
 
-class Eagle extends Bird { ... }
-
-// Pengiun KẾ THỪA Bird, nhưng Penguin KHÔNG BIẾT BAY!
-class Penguin extends Bird {
-    fly() { 
-        throw new Error("Penguins cannot fly!"); // Bóp méo chức năng mặc định của cha, làm ứng dụng chết.
-    }
+const providers: Record<string, PaymentProvider> = {
+	stripe: new StripeProvider(...),
+	paypal: new PaypalProvider(...),
 }
 ```
 
-**Cách khắc phục:** 
-Tách Interface ra. Ví dụ tạo class gốc `Bird`. Các class bay được thì implement giao diện `Flyable`.
+### 2.4 OCP và API versioning
+
+- OCP không có nghĩa “không bao giờ sửa API”.
+- Nhưng bạn nên thiết kế để mở rộng payload (optional fields) và giữ backward compatible.
 
 ---
 
-## 4. I - Interface Segregation Principle (ISP) - Nguyên lý Phân tách Interface
+## 3) L — Liskov Substitution Principle (LSP)
 
-> **"Nhiều Interface cụ thể dành cho từng Client tốt hơn là một Interface làm mọi thứ (General-purpose Interface). Không nên ép các class cài đặt những phương thức mà nó không sử dụng."**
+### 3.1 Định nghĩa
 
-**Giải thích:**
-Tránh tạo ra một Interface (Hợp đồng) quá khổng lồ mập mạp nhét đủ mọi hàm thập cẩm. Khi đó các class kế thừa (implement) nó sẽ phải lấy cả những phương thức ngớ ngẩn thừa thãi mà chúng chẳng bao giờ dùng tới làm rác và vỡ kiến trúc code.
+> Nếu S là subtype của T, thì các object của T có thể được thay thế bằng S **mà không làm sai chương trình**.
 
-**Ví dụ (Vi phạm ISP):**
-```typescript
-// Interface quá to
-interface Worker {
-    work(): void;
-    eat(): void;
-    sleep(): void;
-}
+Nói đơn giản: “implement interface/extend base class” phải giữ đúng **hợp đồng (contract)**.
 
-class HumanWorker implements Worker {
-    work() { console.log("Working"); }
-    eat() { console.log("Eating"); }
-    sleep() { console.log("Sleeping"); }
-}
+### 3.2 Vi phạm LSP trông như thế nào?
 
-// Robot không ăn không ngủ! Nhưng lại bị ÉP phải Override hàm đó do implement Worker Interface.
-class RobotWorker implements Worker {
-    work() { console.log("Working forever"); }
-    eat() { throw new Error("Robots don't eat"); } // Bị rác
-    sleep() { throw new Error("Robots don't sleep"); } // Bị rác
-}
-```
+- Subclass/implementation ném lỗi ở các method “không hỗ trợ”.
+- Subclass thay đổi ý nghĩa của method, hoặc yêu cầu precondition mạnh hơn.
+- Subclass trả về dữ liệu không đúng expectation (vd. null khi contract nói không).
 
-**Cách khắc phục (Tuân thủ ISP):** Chia nhỏ Interface.
-```typescript
-interface Workable { work(): void; }
-interface Feedable { eat(): void; }
-interface Sleepable { sleep(): void; }
+Ví dụ web thực tế:
 
-class HumanWorker implements Workable, Feedable, Sleepable { ... }
-class RobotWorker implements Workable { ... } // Chỉ bắt buộc code logic làm việc. Rất Clean!
-```
+- Interface `EmailSender.send()` nhưng implementation `MockEmailSender` không gửi và cũng không lưu gì, khiến use case nghĩ là đã gửi.
+- `CacheRepository.get()` của Redis implementation throw khi miss, trong khi contract kỳ vọng trả về `undefined/null`.
+
+### 3.3 Cách tránh vi phạm LSP
+
+- Viết contract rõ trong interface (input/output, error cases).
+- Chuẩn hoá error types (Result/Exception mapping).
+- Dùng test suite chung cho mọi implementation (contract tests).
+
+Ví dụ: test chung cho `UserRepository` (create/find/update) chạy trên Postgres repo và InMemory repo.
 
 ---
 
-## 5. D - Dependency Inversion Principle (DIP) - Nguyên lý Đảo ngược Phụ thuộc
+## 4) I — Interface Segregation Principle (ISP)
 
-> **"1. Các module cấp cao (High-level) không nên phụ thuộc vào các module cấp thấp (Low-level). Cả hai nên phụ thuộc vào Interface (hoặc lớp trừu tượng - Abstractions).**
-> **2. Abstractions (Lớp trừu tượng) không nên phụ thuộc vào Implementation (chi tiết triển khai). Mà Implementation phải phụ thuộc vào Abstractions."**
+### 4.1 Định nghĩa
 
-*(Đừng nhầm lẫn DIP - một Dependency Inversion Principle trong cấu trúc với DI - Dependency Injection là một Pattern).*
+> Không nên ép client phụ thuộc vào những method mà client không dùng.
 
-**Giải thích:**
-Class chứa logic nghiệp vụ cốt lõi không nên khởi tạo thẳng (khai báo `new MySQLDatabase()`) các class chứa kiến trúc lặt vặt. Khi dự án đổi DB sang Oracle/MongoDB, bạn sẽ phải vào tận class cấu hình ở module cao để sửa. Khi đó bạn nên truyền vào tham số ở dưới dạng một `Interface` chung chung. 
+Thực dụng: thay vì một interface “to” và nhiều method, hãy tách thành các interface nhỏ theo nhu cầu.
 
-**Ví dụ (Vi phạm DIP):**
-```typescript
-class MySQLConnection {
-    connect() { console.log("Connecting to MySQL..."); }
+### 4.2 Dấu hiệu vi phạm ISP
+
+- Interface có rất nhiều method, nhưng mỗi class chỉ implement được một phần.
+- Có nhiều method throw `NotImplemented`.
+- Thay đổi một method khiến rất nhiều implementation phải sửa dù không liên quan.
+
+Ví dụ trong web:
+
+- `UserRepository` gồm cả `searchUsers`, `exportUsers`, `deleteAll`, `streamUsers`…
+
+### 4.3 Áp dụng ISP trong backend
+
+- Tách interface theo use case:
+  - `UserReader` (read)
+  - `UserWriter` (write)
+  - `UserSearch` (search)
+
+Ví dụ khái niệm:
+
+```ts
+interface UserReader {
+  findById(id: string): Promise<User | null>;
 }
-
-class UserService {
-    private db: MySQLConnection; // Module cấp cao UserService MẮC KẸT CỨNG với module cấp thấp MySQL.
-    
-    constructor() {
-        this.db = new MySQLConnection(); // Hard Code. Xấu. Khác gì tự khóa tay mình.
-    }
+interface UserWriter {
+  save(user: User): Promise<void>;
 }
 ```
 
-**Cách khắc phục (Tuân thủ DIP):** 
-```typescript
-// 1. Tạo Abstraction Interface chung (Cả High-level và Low-level đều dựa vào đây)
-interface DatabaseConnection {
-    connect(): void;
-}
+### 4.4 ISP trong frontend
 
-// 2. Các Implementation cụ thể sẽ chịu trách nhiệm kế thừa Interace trên
-class MySQLConnection implements DatabaseConnection { ... }
-class MongoDBConnection implements DatabaseConnection { ... }
-
-// 3. Module cấp cao (UserService) chỉ phụ thuộc vào Interface
-class UserService {
-    private db: DatabaseConnection; 
-
-    // Bơm qua Constructor (Dependency Injection kết hợp)
-    constructor(dbConnection: DatabaseConnection) {
-        this.db = dbConnection;
-    }
-}
-
-// Khi lập trình, bạn thoải mái cấu hình truyền vào bất kì Object DB nào, DB Oracle hay TestMocking DB đều dùng chung trên UserService cũ mà không hỏng.
-const app = new UserService(new MongoDBConnection()); 
-```
+- Props của component không nên là “mega-props”.
+- Tách component theo use case UI: `UserList`, `UserRow`, `UserSearchBar`.
 
 ---
-**Tổng kết:** Dù có tên gọi khá hàn lâm, 5 nguyên lý phân định trách nhiệm code của SOLID là cực kỳ quan trọng ở các mốc dự án Enterprise, giúp giảm gánh nặng Tech Debt (nợ kỹ thuật) và giữ cho các lập trình viên một trạng thái "Code dễ đọc, nhắm mắt nâng cấp mà không sợ sập server".
+
+## 5) D — Dependency Inversion Principle (DIP)
+
+### 5.1 Định nghĩa
+
+> High-level modules không nên phụ thuộc low-level modules. Cả hai nên phụ thuộc vào **abstractions**.
+
+Trong web backend:
+
+- Use case (high-level) không phụ thuộc trực tiếp ORM/SDK (low-level)
+- Use case phụ thuộc interface (port)
+- ORM/SDK adapter implement interface đó
+
+### 5.2 DIP giúp gì trong web?
+
+- Dễ test: mock interface.
+- Dễ thay integration: đổi Stripe ↔ Adyen, Postgres ↔ Mongo (trong giới hạn).
+- Giảm coupling framework: code nghiệp vụ ít bị dính.
+
+### 5.3 Composition root (nơi “lắp ráp” dependencies)
+
+- Wiring/DI nên tập trung ở một nơi (bootstrap/module init).
+- Tránh tạo dependencies rải rác trong domain.
+
+### 5.4 DIP và Clean Architecture
+
+Clean Architecture là một cách hiện thực DIP ở mức kiến trúc:
+
+- Interfaces (ports) nằm ở layer application/domain.
+- Implementations nằm ở layer infrastructure.
+
+---
+
+## 6) SOLID áp dụng vào những phần nào của web system?
+
+### 6.1 Backend
+
+- Controllers/handlers (SRP)
+- Use cases/services (SRP, DIP)
+- Repositories/adapters (ISP, LSP)
+- Policies/strategies (OCP)
+
+### 6.2 Frontend
+
+- Components/hook boundaries (SRP)
+- UI composition (OCP theo kiểu “plug-in components”)
+- Abstraction của data fetching (DIP/ISP ở mức module)
+
+### 6.3 Infrastructure as code / pipelines
+
+SOLID chủ yếu cho code, nhưng tinh thần vẫn đúng:
+
+- module hoá, tách trách nhiệm
+- tránh file pipeline “god file”
+
+---
+
+## 7) Cân bằng: SOLID vs over-engineering
+
+SOLID hay bị hiểu sai thành “mọi thứ phải có interface”. Thực dụng:
+
+- Tạo abstraction khi:
+  - có ít nhất 2 implementation
+  - hoặc cần mock dễ trong tests
+  - hoặc ranh giới với hệ thống ngoài (DB, payment, email)
+
+- Không cần abstraction khi:
+  - logic đơn giản, ít thay đổi
+  - abstraction làm khó đọc hơn lợi ích mang lại
+
+Rule of thumb:
+
+- Abstraction có chi phí. Chỉ trả chi phí khi giảm rủi ro thay đổi.
+
+---
+
+## 8) Refactoring playbook (thực hành)
+
+### 8.1 Khi gặp “God controller/service”
+
+- Tách theo use case.
+- Đẩy business logic khỏi controller vào use case.
+- Tách integrations thành adapters.
+
+### 8.2 Khi gặp `switch/case` theo type
+
+- Dùng Strategy/registry.
+- Mỗi type có handler riêng (OCP).
+
+### 8.3 Khi interface quá to
+
+- Tách thành các interface nhỏ (ISP).
+- Viết contract tests để đảm bảo LSP.
+
+### 8.4 Khi code nghiệp vụ dính ORM
+
+- Tạo repository interface.
+- Move mapping/ORM details ra adapter.
+- Wiring qua DI.
+
+---
+
+## 9) Anti-patterns thường gặp khi “áp SOLID”
+
+- **Interface cho mọi class** dù không cần.
+- **Abstraction leak**: interface vẫn lộ query builder/HTTP details.
+- **Inheritance lạm dụng**: hierarchy sâu khó hiểu (vi phạm SRP/OCP/LSP).
+- **Mock quá mức** làm test brittle.
+- **Chạy theo nguyên tắc** thay vì mục tiêu (dễ thay đổi, dễ test).
+
+---
+
+## 10) Checklist SOLID production-ready cho web
+
+### SRP
+
+- [ ] Controller mỏng, không chứa business logic
+- [ ] Use case/service tách theo hành động nghiệp vụ
+- [ ] Tách integrations thành adapters riêng
+
+### OCP
+
+- [ ] Tránh `switch/case` khổng lồ cho các biến thể
+- [ ] Dùng strategy/registry cho provider/channel/type
+
+### LSP
+
+- [ ] Interfaces có contract rõ
+- [ ] Implementations không “phá” pre/post conditions
+- [ ] Có contract tests cho các adapters quan trọng
+
+### ISP
+
+- [ ] Interfaces nhỏ, đúng nhu cầu use case
+- [ ] Không có method “không dùng” hoặc `NotImplemented`
+
+### DIP
+
+- [ ] Use case phụ thuộc interfaces, không phụ thuộc ORM/SDK
+- [ ] DI/composition root rõ ràng
+- [ ] Dễ viết unit test bằng mocks/fakes

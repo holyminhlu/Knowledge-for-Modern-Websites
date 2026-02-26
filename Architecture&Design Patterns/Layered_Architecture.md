@@ -1,35 +1,241 @@
-# Layered Architecture (Kiến trúc phân lớp / N-Tier)
+---
+title: Layered Architecture trong lập trình web
+description: Handbook production-ready về Layered Architecture (n-tier): các tầng Presentation/Application/Domain/Data, nguyên tắc dependency, cách áp dụng trong web backend/API, ưu/nhược, biến thể, pitfalls và checklist.
+---
 
-## 1. Khái niệm (What is Layered Architecture?)
-**Layered Architecture (Kiến trúc phân lớp)** là mẫu kiến trúc phần mềm kinh điển, dễ hiểu và phổ biến nhất thế giới. Hầu hết các lập trình viên đều mặc định thiết kế ứng dụng theo mô hình này khi bắt đầu một dự án Backend mới.
-Trong Layered Architecture, hệ thống được chia cắt thành nhiều khối thành phần ngang nằm xếp chồng lên nhau (như một chiếc bánh nhiều tầng). Mỗi tầng (Layer) đảm nhận một vai trò cụ thể trong toàn bộ vòng đời Request/Response của ứng dụng.
+# Layered Architecture trong lập trình web
 
-**Quy tắc bất di bất dịch:** Tầng ở trên chỉ được phép gọi và phụ thuộc xuống tầng ngay liền kề dưới nó (Theo luồng từ trên xuống dưới - Top-Down). Không được phép nhảy cóc (Ví dụ Web Layer không được nhảy thẳng xuống Database).
+## 0) Layered Architecture là gì?
 
-## 2. Mô hình 3 Tầng tiêu chuẩn (3-Tier Architecture)
+**Layered Architecture** (còn gọi là **n-tier architecture**) là cách tổ chức hệ thống thành các **tầng (layers)** với trách nhiệm rõ ràng, thường gặp nhất trong web app:
 
-### a. Presentation Layer (Tầng Giao diện / Controllers)
-- Nơi hứng chịu toàn bộ các Request (Yêu cầu) từ phía người dùng, Client, trình duyệt hoặc Mobile App.
-- **Trách nhiệm chính:** Kiểm tra xác thực (Auth/Validation), bóc tách HTTP Request lấy ra params, body, điều phối gọi tầng dưới xử lý, lấy kết quả về và bọc lại thành cục Response JSON hoặc HTML trả về cho khách.
-- **Ví dụ:** Các file Controller, Routes (Endpoint API). Lớp Web.
+- **Presentation/UI layer**: HTTP controllers, views, API handlers
+- **Application/Service layer**: orchestration nghiệp vụ ở mức “use case”
+- **Domain layer**: business rules (entity, domain services)
+- **Data/Infrastructure layer**: database access, external integrations
 
-### b. Business Logic Layer / Service Layer (Tầng Nghiệp vụ / Dịch vụ)
-- Trái tim của hệ thống. Đây là nơi chứa toàn bộ tri thức và các quy định của phần mềm (Business Rules). 
-- **Trách nhiệm chính:** Thực hiện thuật toán tính toán, xử lý logic, nghiệp vụ, quyết định xem một user có được phép vay tiền không, xuất hóa đơn ra làm sao, tính tổng số dư...
-- **Quan trọng:** Tầng này không được chứa code quan tâm tới Request của Web HTTP (`req/res`) hay câu truy vấn SQL (Query). Nó thuần nhận Arguments đầu vào và xử lý.
-- **Ví dụ:** Các file Services (`UserService`, `OrderService`).
+Mục tiêu:
 
-### c. Data Access Layer / Persistence Layer (Tầng Truy cập dữ liệu)
-- Tầng giao tiếp sâu nhất nằm ở đáy của ứng dụng.
-- **Trách nhiệm chính:** Chứa mã code dùng để nói chuyện trực tiếp với Database, File System, hoặc các 3rd Party APIs bên ngoài. Dịch cái yêu cầu lấy dữ liệu từ tầng trên thành các câu `SELECT/INSERT/UPDATE` SQL bóc tách bản ghi tương ứng.
-- **Ví dụ:** Các file Repositories (`UserRepository`, `ProductDAO`), thư mục cài đặt ORM (Hibernate, TypeORM).
+- code dễ đọc/dễ phân công
+- thay đổi UI/DB ít ảnh hưởng đến business
+- testing và maintainability tốt hơn so với “spaghetti code”
 
-## 3. Ưu điểm của kiến trúc lớp
-- **Dễ hiểu, dễ tổ chức:** Chia ngăn nắp 3 phần (Giao tiếp HTTP -> Xử lý logic -> Lưu trữ Database). Ngay cả lính mới (Junior) nhìn vào thư mục là lường trước ngay được file nào nhét ở đâu.
-- **Bảo trì dễ dàng:** Cần sửa câu query? Vào DAO/Repository. Cần sửa logic thuế? Vào Service. Cần đổi API trả về XML thay vì JSON? Vào Controller. Sự phân tách trách nhiệm (SRP) được đề cao.
-- Phù hợp hoàn hảo để đẩy nhanh tiến độ làm các dự án Web nguyên khối (Monolithic App) của các Startup/Công ty vừa và nhỏ.
+---
 
-## 4. Nhược điểm (Những cái bẫy chết người)
-- **Kiến trúc vỡ trận (Kiến trúc vũng bùn - Big Ball of Mud):** Do không có nguyên tắc mạnh như Clean Architecture, lập trình viên sẽ rất dễ nhét thẳng câu truy vấn SQL vào Controller để code nhanh cho xong lúc deadline, bẻ gãy mọi vách ngăn của Layer.
-- **Database Driven Design (Bị DB thống trị):** Logic nghiệp vụ thường bị phụ thuộc quá lố vào cách tổ chức bảng trong DB (Table-first design). Dẫn tới khi muốn sửa 1 cột trong database, ta phải đập nát sửa lại từ DAO, lên Service, và sửa hỏng luôn cả Controller. Phụ thuộc Bottom-Up rất lớn.
-- **Kiến trúc kẹt băng thông:** Nhiều khi Request chỉ đòi `SELECT * FROM users`, ta vẫn bị bắt ép code viết ra 1 file rỗng bên Service chỉ để làm cầu chuyền bóng trung gian, gõ 1 đống Boilerplate dư thừa.
+## 1) Các tầng phổ biến (và trách nhiệm)
+
+Không có một “chuẩn” duy nhất, nhưng các team thường dùng 3–5 tầng.
+
+### 1.1 Presentation layer (Web/API)
+
+Nhiệm vụ:
+
+- parse request (path/query/body)
+- authn/authz ở mức route (tuỳ thiết kế)
+- validation dạng transport (schema/type/required)
+- gọi Application layer
+- map output → HTTP response
+
+Không nên:
+
+- nhét business logic
+- gọi DB trực tiếp
+
+### 1.2 Application layer (Service/Use case)
+
+Nhiệm vụ:
+
+- hiện thực các “use cases” (CreateOrder, CancelSubscription...)
+- điều phối transaction
+- gọi repository / external services
+- enforce business rules ở mức workflow
+
+### 1.3 Domain layer
+
+Nhiệm vụ:
+
+- entity/value objects
+- invariant nghiệp vụ
+- domain services (khi logic không thuộc entity cụ thể)
+
+Domain nên “sạch”: ít phụ thuộc framework.
+
+### 1.4 Data/Infrastructure layer
+
+Nhiệm vụ:
+
+- repository implementations
+- ORM/SQL/driver
+- integrations: email/SMS/payment
+- message broker clients
+
+---
+
+## 2) Nguyên tắc phụ thuộc (Dependency direction)
+
+Layered Architecture tốt nhất khi có quy tắc phụ thuộc rõ:
+
+- Presentation → Application → Domain → Infrastructure/Data
+
+Trong thực tế, để giảm coupling:
+
+- **Domain không phụ thuộc Data**
+- **Application phụ thuộc interface** (repository ports) thay vì phụ thuộc trực tiếp ORM (đây là điểm “tiệm cận” Clean Architecture)
+
+Tối thiểu, bạn nên tránh:
+
+- Controller gọi thẳng ORM
+- Domain import HTTP/DB exceptions
+
+---
+
+## 3) Luồng xử lý request trong web backend theo layers
+
+Một request API điển hình:
+
+1. Controller nhận request
+2. Validate + convert sang input DTO
+3. Gọi Application service (use case)
+4. Application service gọi repositories/integrations
+5. Domain entities kiểm tra invariant / tính toán
+6. Application service trả result
+7. Controller trả HTTP response
+
+---
+
+## 4) Variants: 3-layer, 4-layer, n-tier và “onion-ish” layered
+
+### 4.1 Classic 3-layer
+
+- Presentation
+- Business (Application)
+- Data access
+
+Phù hợp hệ thống nhỏ–vừa.
+
+### 4.2 Thêm Domain layer rõ ràng
+
+- Presentation
+- Application
+- Domain
+- Infrastructure
+
+Giúp business rules được “đóng gói” tốt hơn.
+
+### 4.3 Layered + Ports/Adapters
+
+- Application/Domain định nghĩa interfaces
+- Infrastructure implements
+
+Đây là cách áp dụng thực dụng để giữ layered đơn giản nhưng vẫn testable.
+
+---
+
+## 5) So sánh nhanh: Layered vs Clean Architecture
+
+Giống nhau:
+
+- đều tách trách nhiệm
+- đều cố giảm coupling
+
+Khác nhau thực dụng:
+
+- **Layered** thường mô tả theo “tầng kỹ thuật” (presentation/business/data), dễ hiểu, dễ bắt đầu.
+- **Clean Architecture** nhấn mạnh mạnh hơn về **Dependency Rule** và “framework là chi tiết”, thường dùng ports/adapters rõ ràng hơn.
+
+Bạn có thể bắt đầu layered và dần “làm sạch” hướng Clean bằng cách:
+
+- đưa business rules vào domain/use case
+- đảo phụ thuộc qua interfaces (DI)
+
+---
+
+## 6) Ưu điểm
+
+- Dễ onboarding: ai cũng hiểu controller/service/repo.
+- Dễ phân chia công việc.
+- Thay đổi một tầng ít ảnh hưởng tầng khác nếu boundary tốt.
+- Dễ tổ chức testing theo tầng (unit/integration).
+
+---
+
+## 7) Nhược điểm và rủi ro
+
+### 7.1 Coupling ngầm
+
+- Nếu không có rule rõ, code vẫn “đi tắt” giữa tầng.
+
+### 7.2 Anemic domain
+
+- Domain chỉ là DTO, logic nằm hết trong services.
+
+### 7.3 Over-layering
+
+- Tạo quá nhiều lớp/abstractions cho hệ thống nhỏ.
+
+### 7.4 Leakage của persistence model
+
+- ORM entities trở thành domain entities và kéo theo DB concerns.
+
+---
+
+## 8) Best practices khi áp dụng Layered Architecture trong web
+
+### 8.1 Định nghĩa ranh giới rõ ràng
+
+- Controller: transport concerns
+- Application service: orchestration
+- Domain: rules/invariants
+- Repository: data access
+
+### 8.2 Validation 2 lớp
+
+- Transport validation ở controller
+- Business validation ở application/domain
+
+### 8.3 Transaction boundary
+
+- Application service thường là nơi mở/commit transaction.
+
+### 8.4 DTO/Mapper (vừa đủ)
+
+- DTO cho API input/output
+- Mapper để domain không dính vào API shape
+
+### 8.5 Logging/observability
+
+- Logging ở boundary (controller/application) để tránh “bẩn” domain.
+- Correlation id/trace id xuyên suốt request.
+
+---
+
+## 9) Anti-patterns phổ biến
+
+- **Controller gọi DB trực tiếp**.
+- **Service layer thành “God service”**: quá to, làm mọi thứ.
+- **Domain là DTO rỗng** (anemic domain) + logic rải rác.
+- **Repository trả về ORM entity** và bị dùng khắp nơi.
+- **Phá luật phụ thuộc**: domain import framework exceptions/config.
+- **N-tier chỉ là thư mục**: đặt tên layer nhưng không enforce boundaries.
+
+---
+
+## 10) Checklist Layered Architecture production-ready
+
+### Thiết kế
+
+- [ ] Xác định rõ các layers và trách nhiệm
+- [ ] Quy ước dependency direction (không gọi tắt)
+- [ ] Business rules nằm trong application/domain, không nằm ở controller
+
+### Dữ liệu
+
+- [ ] Repository che giấu ORM/SQL khỏi application
+- [ ] Mapping DTO ↔ domain rõ ràng
+- [ ] Transaction boundary ở application
+
+### Chất lượng
+
+- [ ] Unit tests cho domain/application
+- [ ] Integration tests cho persistence adapters
+- [ ] Observability (logs/metrics/tracing) theo boundary

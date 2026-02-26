@@ -1,56 +1,357 @@
-# API Rate Limiting (Giới hạn tỷ lệ API)
+---
+title: API Rate Limiting
+description: Handbook thực chiến về rate limiting cho API/web systems: mục tiêu, policy, thuật toán (token bucket/leaky bucket/sliding window), triển khai phân tán (Redis), headers/429, chống abuse/DDoS, observability và checklist.
+---
 
-## 1. Khái niệm (What is Rate Limiting?)
-**Rate Limiting (Giới hạn tỷ lệ)** là một kỹ thuật kiểm soát lưu lượng mạng để điều tiết số lượng yêu cầu (requests) mà một khách hàng (client) - có thể là một user, một IP, hoặc một ứng dụng cụ thể - được phép gửi tới máy chủ (server) hoặc một API API endpoint trong một khoảng thời gian nhất định (ví dụ: 100 requests/phút).
+# Rate limiting API trong lập trình web
 
-Khi client vượt quá số lượng request cho phép, Server sẽ từ chối xử lý và thường trả về HTTP Status Code **429 (Too Many Requests)**.
+## 1) Rate limiting là gì? Giải quyết vấn đề gì?
 
-## 2. Tại sao lại cần Rate Limiting? (Why do we need it?)
-Rate Limiting không chỉ là tính năng "Nice-to-have" mà là lớp khiên bảo vệ sống còn của mọi hệ thống Backend:
+**Rate limiting** là cơ chế giới hạn số lượng request (hoặc “đơn vị tiêu thụ”) mà một client có thể thực hiện trong một khoảng thời gian.
 
-- **Chống tấn công từ chối dịch vụ (DDoS & DoS):** Ngăn chặn hacker sử dụng botnet gửi hàng triệu request rác mỗi giây làm kiệt quệ tài nguyên CPU, RAM, Database của Server khiến hệ thống sập và người dùng thật không thể truy cập được.
-- **Chống tấn công Brute-Force (Dò mật khẩu / OTP):** Nếu màn hình đăng nhập không có giới hạn, hacker có thể chạy tool thử hàng tỷ mật khẩu hoặc mã OTP trong thời gian ngắn cho đến khi đúng. Kể cả với reCAPTCHA, giới hạn số lần thử (Ví dụ: Khóa tài khoản / Block IP sau 5 lần sai trong 1 phút) là bắt buộc.
-- **Ngăn chặn chi phí hạ tầng bùng nổ (Cost Control):** Các dịch vụ đám mây (AWS, Google Cloud) hoặc Third-party API (OpenAI, Stripe) thường tính tiền theo số lượng request hoặc băng thông (Pay-as-you-go). Nếu không Rate limit, một bug lặp vô hạn (Infinite loop) trên code Frontend của ai đó có thể đốt hàng nghìn đô la của bạn sau một đêm.
-- **Đảm bảo tính công bằng (Fairness & SLA):** Không để một user hoặc một tenant (khách hàng doanh nghiệp) sử dụng tham lam chiếm đoạt hết năng lực tính toán của toàn hệ thống, làm chậm phần mềm của tập người dùng khác đang chung máy chủ.
-- **Mô hình kinh doanh API (Monetization):** Chia gói cước API (Free Tier: 100 req/ngày, Pro Tier: 10.000 req/ngày). Khách dùng hết thì văng lỗi `429` ép mua gói cao hơn.
+Mục tiêu chính:
 
-## 3. Rate Limit thường được đặt ở đâu?
-1. **Application Layer (Trong Code Backend):** Cài đặt qua Middleware (ví dụ dùng thư viện `express-rate-limit` trong Node.js, `Throttle` của Laravel). Thích hợp để khóa rate limit dựa vào thông tin nghiệp vụ như User-ID, Session-ID sau khi người dùng đã có Token. Dễ code nhưng gây một chút tải phụ vì Request vẫn phải chui vào tới tầng Application chạy logic.
-2. **API Gateway / Reverse Proxy (Nginx, Kong, HAProxy, AWS API Gateway):** Nơi tốt nhất để chặn các Request chưa cần phân tích sâu (như chặn IP, chặn Path). Block thẳng từ ngoài cổng mạng bảo vệ toàn vẹn App Server phía sau. Thường dựa trên IP, Headers, hoặc API Keys.
-3. **WAF & Cloud (Cloudflare, AWS WAF):** Bảo vệ toàn cục hạ tầng, chặn các dải IP xấu, chặn DDoS ở cấp độ Routing trên toàn cầu trước khi chúng kịp tới lãnh thổ Data Center của bạn.
+- **Bảo vệ hệ thống** khỏi overload (spikes, retry storms, scraping).
+- **Ngăn abuse**: brute-force login, credential stuffing, enumeration.
+- **Công bằng tài nguyên** giữa users/tenants.
+- **Bảo vệ downstream**: DB, cache, external APIs.
+- **Hỗ trợ model kinh doanh**: quota theo gói (free/pro).
 
-## 4. Các thuật toán Rate Limiting phổ biến (Algorithms)
+Rate limiting thường đi kèm:
 
-### a. Token Bucket (Xô Token - Rất phổ biến, AWS & Stripe dùng)
-- **Cơ chế:** Tưởng tượng một cái xô có sức chứa tối đa là `N` tokens (Ví dụ: 100 cái). Cứ mỗi `1/r` giây, hệ thống sẽ tự động nhỏ thêm 1 token vào xô (Ví dụ: nạp 10 token/giây) cho đến khi xô đầy thì không nạp nữa.
-- Khi có 1 Request đến, nó sẽ bốc 1 token ra khỏi xô và đi tiếp. Nếu xô rỗng không còn token nào, Request đó bị từ chối (429).
-- **Ưu điểm:** Cho phép lưu lượng truy cập bùng nổ đột ngột (Burst traffic) cực mượt. Nếu bạn tích đủ 100 token, bạn có thể bắn liền lúc 100 request trong 1 mili-giây mà API vẫn chấp nhận.
-- **Lưu trữ thường dùng:** Redis.
+- throttling / shaping
+- quota management
+- WAF/bot mitigation
+- circuit breakers và backpressure
 
-### b. Leaky Bucket (Xô rò rỉ - Nginx dùng mặc định)
-- **Cơ chế:** Gần giống Token Bucket nhưng ngược lại. Tưởng tượng một cái xô thủng đáy, nước (Request) nhỏ giọt trôi xuống (Được xử lý) ở một **Tốc độ cố định** không đổi (Ví dụ: 10 request/giây).
-- Khi có lượng lớn Request đổ ập vào xô từ phía trên. Nếu tốc độ đổ vào lớn hơn tốc độ thủng, những Request nào tràn qua miệng xô (vượt dung lượng hàng đợi) sẽ bị loại bỏ (429).
-- **Ưu điểm:** Dễ dàng san phẳng traffic (Traffic Shaping), kiểm soát nhịp điệu của Server cực kỳ ổn định, không bảo giờ có chuyện server phải xử lý bùng nổ quá tải. Chấp nhận hi sinh các thay đổi đột biến của Client.
+---
 
-### c. Fixed Window Counters (Cửa sổ cố định thời gian)
-- **Cơ chế:** Chia timeline dòng thời gian thành các khung cửa sổ cứng nhắc tĩnh tại (Ví dụ: [00:00 -> 00:01], [00:01 -> 00:02]). Mỗi cửa sổ cấp hạn ngạch `N` request. Có Request thì `Counter++`. Qua phút mới Reset lại về 0.
-- **Nhược điểm (Edge-case):** Rất dễ lỗi ở ranh giới giao thoa phút. (Ví dụ: Mốc 00:00:59, bạn xả 100 req. Sang mốc 00:01:00, counter reset về 0, bạn bắn bồi thêm 100 req. Vậy trong vỏn vẹn 2 giây đó Server đã lỡ cõng 200 request, gấp đôi tải mức cấu hình giới hạn là 100/phút). Ít được dùng ở production lớn.
+## 2) Rate limiting đặt ở đâu?
 
-### d. Sliding Window Log (Nhật ký Cửa sổ trượt)
-- **Cơ chế:** Khắc phục Fixed Window. Thay vì đếm Counter nguyên cục, nó lưu thời gian (Timestamp) cụ thể của từng Request một vào mảng danh sách/Sorted Set sinh ra theo IP đó trong Redis. Khi nhận Request mới lúc thời điểm `T`, hệ thống vào mảng xóa bay màu các Timestamp cũ hơn `T - 1 phút`, sau đó đếm số Timestamp còn lại xem có vượt quá giới hạn chưa.
-- **Ưu điểm:** Cực kỳ chính xác không bị lọt Burst Traffic qua kẽ hở thời gian.
-- **Nhược điểm:** Tốn quá nhiều dung lượng RAM lưu trữ dữ liệu rác (Mảng bộ nhớ Timestamp lớn) dẫn đến đắt đỏ nếu chạy lưu lượng khổng lồ, tính toán nặng.
+Bạn có thể limit ở nhiều tầng (và thường nên kết hợp):
 
-### e. Sliding Window Counter (Bộ đếm Cửa sổ trượt - Được coi là tối ưu nhất)
-- **Cơ chế:** Giải pháp cân bằng hoàn hảo lai tạo từ 2 cái trên. Nó chỉ lưu Counter của Fixed Window hiện tại và Fixed Window liền kề trước đó. Nó dùng trọng số dự đoán dựa trên tỷ lệ % thời gian trôi qua của Window hiện hành để kéo dãn ngưỡng giới hạn mượt mà dần đều.
-- **Ưu điểm:** Đủ độ chính xác cực cao, vừa cực kỳ ít tốn RAM / CPU tính toán (chỉ cần lấy 2 con số làm toán cộng trừ nhân). Thường được hệ thống lớn như Cloudflare áp dụng.
+### 2.1 Edge/CDN/WAF
 
-## 5. Cấu trúc Response của một API bị Rate Limit (Best Practices)
-Khi giới hạn rate limit bắt đầu hoạt động, một API chuẩn RESTful Backend "Lịch sự" không chỉ thẳng tay báo mã lỗi `429` cộc lốc mà phải gửi kèm theo các **HTTP Headers định dạng RateLimit** để báo cho phía Client Frontend biết chính xác khi nào nó được mở khóa, còn bao nhiêu lượt. 
+- Tốt để chặn volumetric abuse sớm.
+- Có thể limit theo IP/geo/bot score.
 
-Các Headers thông dụng thường bao gồm:
-- `X-RateLimit-Limit`: Tổng số lượt requests tối đa được phép gọi trên một khung thời gian.
-- `X-RateLimit-Remaining`: Số lượng lượt requests hệ thống còn ghi nhận cho phép bạn gửi tiếp trong khung thời gian hiện tại.
-- `X-RateLimit-Reset`: Thời gian (Tính bằng Unix Epoch Time) ghi rõ khoảnh khắc cửa sổ Window sẽ được reset lại cho bạn `Remaining = Limit`. (Có loại lại dùng `Retry-After: 30` ý bảo 30 giây nữa hãy gọi lại).
+### 2.2 API gateway / Load balancer (L7)
 
-=> Dựa vào những tín hiệu này, anh thiết kế UI/UX trên Frontend có thể làm trạng thái hiển thị "Đang xử lý chậm lại" thay vì để App văng Error chớp nhoáng khó hiểu khiến người dùng ức chế.
+- Phù hợp limit theo route, API key, JWT claims.
+- Dễ áp policy tập trung.
+
+### 2.3 Application (service)
+
+- Cần khi policy phụ thuộc logic nghiệp vụ, hoặc limit theo tenant/user context sâu.
+
+### 2.4 Downstream-specific
+
+- Rate limit theo dependency (DB pool, external provider) để tránh “một endpoint làm sập tất cả”.
+
+Nguyên tắc thực chiến:
+
+- Chặn càng sớm càng tốt (edge) để giảm chi phí.
+- Nhưng vẫn cần limit ở app tier cho các policy theo user/tenant.
+
+---
+
+## 3) Thiết kế policy rate limiting
+
+### 3.1 Chọn “đối tượng” để limit
+
+- **IP**: dễ nhưng NAT/proxy làm nhiều user chung IP.
+- **User ID**: tốt sau khi auth.
+- **API key / client id**: hợp cho public APIs.
+- **Tenant ID**: bắt buộc trong multi-tenant SaaS.
+- **Device/session**: tuỳ sản phẩm.
+
+Thực hành tốt:
+
+- Kết hợp nhiều key: ví dụ limit theo tenant + theo user + theo IP.
+
+### 3.2 Chọn “đơn vị” để đo
+
+- Request count (req/min)
+- “Cost-based”: mỗi endpoint có cost khác nhau (vd: search = 5 units, read = 1 unit)
+- Payload size hoặc compute time (hiếm hơn)
+
+### 3.3 Per-route/per-endpoint
+
+- Login/reset password nên limit chặt.
+- Read-only public endpoints có thể limit nhẹ.
+- Admin endpoints limit chặt theo role/tenant.
+
+### 3.4 Burst vs sustained
+
+- Cho phép burst ngắn nhưng giới hạn tốc độ trung bình.
+- Token bucket phù hợp.
+
+---
+
+## 4) Thuật toán rate limiting phổ biến
+
+### 4.1 Fixed window
+
+- Đếm số request trong mỗi window (vd: mỗi phút).
+
+Ưu:
+
+- Dễ triển khai
+  Nhược:
+- “Boundary burst”: user có thể gửi nhiều request ngay trước và sau ranh giới window.
+
+### 4.2 Sliding window log
+
+- Lưu timestamp từng request (list/zset) và đếm trong cửa sổ trượt.
+
+Ưu:
+
+- Chính xác
+  Nhược:
+- Tốn memory/CPU ở traffic lớn
+
+### 4.3 Sliding window counter (approx)
+
+- Kết hợp 2 buckets liền kề, nội suy.
+
+Ưu:
+
+- Nhẹ hơn log
+  Nhược:
+- Xấp xỉ
+
+### 4.4 Token bucket
+
+- Có “xô” chứa token, refill theo rate.
+- Mỗi request tiêu 1 token (hoặc cost units).
+
+Ưu:
+
+- Cho burst trong giới hạn
+- Phổ biến, hiệu quả
+
+### 4.5 Leaky bucket
+
+- “Rò” đều đặn, làm mượt traffic.
+
+Ưu:
+
+- Shaping tốt
+  Nhược:
+- Có thể tăng latency (queue)
+
+---
+
+## 5) Triển khai rate limiting trong hệ thống phân tán
+
+Với nhiều instance, rate limiting phải **nhất quán**.
+
+### 5.1 In-memory per instance (không khuyến nghị cho policy nghiêm)
+
+- Đơn giản nhưng:
+  - tổng limit bị nhân lên theo số instance
+  - không ổn định khi autoscale
+
+### 5.2 Centralized store (Redis) — phổ biến
+
+- Lưu counters/tokens trong Redis.
+- Dùng atomic ops (INCR/EXPIRE) hoặc Lua scripts.
+
+Thực hành tốt:
+
+- Mọi update phải atomic (đặc biệt token bucket/sliding window).
+- Key có TTL để tự dọn.
+- Thêm jitter để tránh avalanche.
+
+### 5.3 Sharding / Redis Cluster
+
+- Traffic lớn cần cluster.
+- Cẩn thận hot keys.
+
+### 5.4 Local cache + periodic sync
+
+- Dùng cho policy “mềm” để giảm Redis load.
+- Cần chấp nhận sai số.
+
+---
+
+## 6) Redis patterns cho rate limiting
+
+### 6.1 Fixed window với INCR
+
+Key: `rl:{client}:{route}:{windowStart}`
+
+- `INCR` để tăng
+- `EXPIRE` theo window
+
+### 6.2 Sliding window (ZSET)
+
+Key: `rl:z:{client}:{route}`
+
+- `ZADD now`
+- `ZREMRANGEBYSCORE` để dọn cũ
+- `ZCOUNT` để đếm
+
+### 6.3 Token bucket (Lua)
+
+- Lua script đảm bảo update token + timestamp atomically.
+- Hỗ trợ cost-based.
+
+Lưu ý hiệu năng:
+
+- ZSET sliding log chính xác nhưng nặng.
+- Token bucket Lua thường là cân bằng tốt.
+
+---
+
+## 7) 429 Too Many Requests và API contract
+
+### 7.1 Trả về status code
+
+- Nếu bị limit: trả **429**.
+
+### 7.2 Headers khuyến nghị
+
+- `Retry-After`: client nên chờ bao lâu.
+- (Tuỳ chuẩn) các header kiểu:
+  - `X-RateLimit-Limit`
+  - `X-RateLimit-Remaining`
+  - `X-RateLimit-Reset`
+
+Nếu API public, headers giúp client tự điều tiết và giảm traffic lặp.
+
+### 7.3 Response body
+
+- Trả JSON rõ ràng:
+  - error code
+  - message
+  - retry_after_seconds
+
+### 7.4 Client behavior
+
+- Client phải:
+  - backoff + jitter
+  - tôn trọng Retry-After
+- Không auto-retry vô hạn (tạo self-DDoS).
+
+---
+
+## 8) Rate limiting cho auth endpoints
+
+Đây là vùng nhạy cảm:
+
+- `/login`: limit theo IP + theo username/email (để chống credential stuffing).
+- `/otp/verify`: limit chặt.
+- `/password/reset`: limit theo IP + theo account.
+
+Kết hợp thêm:
+
+- captcha/challenge
+- device fingerprinting (cẩn thận privacy)
+- anomaly detection
+
+---
+
+## 9) Rate limiting cho multi-tenant SaaS
+
+### 9.1 Tenant quotas
+
+- Mỗi tenant có quota theo plan.
+- Có thể chia:
+  - global quota/tenant
+  - quota theo feature/endpoint
+
+### 9.2 Fairness trong tenant
+
+- Ngăn “một user làm cạn quota cả tenant” bằng sub-limits per user.
+
+### 9.3 Burst allowances
+
+- Cho burst ngắn (token bucket) để UX tốt.
+
+---
+
+## 10) Kết hợp với bảo vệ hệ thống
+
+Rate limiting tốt thường đi cùng:
+
+- **Timeouts** rõ ràng
+- **Circuit breaker** khi downstream lỗi
+- **Queue/backpressure** cho tác vụ async
+- **Caching** cho endpoints read-heavy
+
+Tránh anti-pattern:
+
+- Rate limit không thay thế việc tối ưu DB/query hoặc sửa bug retry.
+
+---
+
+## 11) Observability cho rate limiting
+
+### 11.1 Metrics
+
+- `rate_limit.allowed` / `rate_limit.blocked`
+- Blocked rate theo route/client/tenant (cẩn thận cardinality)
+- Redis latency/error (nếu dùng Redis)
+- Top offenders (dùng sampling/aggregation)
+
+### 11.2 Logs
+
+- Log sự kiện 429 theo cách tổng hợp (tránh log spam).
+- Include correlation id/trace id.
+
+### 11.3 Alerts
+
+- Spikes 429 (có thể là abuse hoặc bug client)
+- Redis errors/latency cao
+- False positives (khách hàng than bị limit)
+
+---
+
+## 12) Security & privacy
+
+- Không log tokens/Authorization headers.
+- Nếu limit theo IP, cẩn thận X-Forwarded-For spoof: chỉ tin IP từ proxy/LB tin cậy.
+- Không lưu PII trong keys nếu không cần (dùng hash/opaque IDs).
+
+---
+
+## 13) Checklist rate limiting production-ready
+
+### Policy
+
+- [ ] Xác định đối tượng limit (IP/user/tenant/api-key)
+- [ ] Per-route policies, đặc biệt auth endpoints
+- [ ] Burst vs sustained rõ ràng (token bucket nếu cần)
+- [ ] Cost-based units cho endpoints nặng (tuỳ)
+
+### Implementation
+
+- [ ] Atomic updates (Lua/transactions) nếu distributed
+- [ ] Keys có TTL
+- [ ] Redis cluster/sentinel theo yêu cầu HA
+- [ ] Fail-open/closed được quyết định rõ:
+  - Fail-open (thường) để tránh outage nếu Redis down
+  - Fail-closed cho endpoints nhạy cảm (cân nhắc UX)
+
+### API contract
+
+- [ ] Trả 429 + `Retry-After`
+- [ ] Client backoff+jitter
+
+### Observability
+
+- [ ] Dashboard allowed/blocked + top routes
+- [ ] Alert spikes 429 và Redis latency/errors
+
+---
+
+## 14) Anti-patterns
+
+- **Limit theo IP duy nhất** trong môi trường NAT → chặn nhầm nhiều user.
+- **Không tin cậy nguồn IP** (XFF spoof) → bypass hoặc block sai.
+- **Không có headers Retry-After** → client spam retry.
+- **Rate limit không phân biệt endpoint** → UX tệ cho actions quan trọng.
+- **Keys không TTL** → memory leak trong Redis.
+- **Log mỗi lần 429** → log volume bùng nổ.
+- **Retry không kiểm soát** khi bị 429 → self-DDoS.
