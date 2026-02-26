@@ -6,7 +6,7 @@ import { KMW_NAV, KMW_SITE } from "@/lib/kmwNav";
 import { useShell } from "@/components/ShellContext";
 
 export default function SidebarNav() {
-  const { sidebarOpen, setSidebarOpen } = useShell();
+  const { sidebarOpen, setSidebarOpen, toggleSidebar } = useShell();
 
   return (
     <aside
@@ -17,6 +17,31 @@ export default function SidebarNav() {
           : "-translate-x-full pointer-events-none")
       }
     >
+      <div className="sticky top-0 -mx-4 mb-4 border-b border-foreground/10 bg-background/95 px-4 pb-3 pt-2 backdrop-blur md:hidden">
+        <div className="flex items-center justify-between gap-3">
+          <Link href="/" className="min-w-0">
+            <div className="truncate text-base font-semibold tracking-tight">
+              {KMW_SITE.name}
+            </div>
+            <div className="truncate text-sm text-foreground/70">{KMW_SITE.fullName}</div>
+          </Link>
+
+          <button
+            type="button"
+            aria-label="Đóng menu"
+            onClick={toggleSidebar}
+            className="inline-flex h-9 w-9 touch-manipulation items-center justify-center rounded-md border border-foreground/10 bg-background hover:bg-foreground/5"
+          >
+            <span className="sr-only">Close sidebar</span>
+            <span className="block w-4">
+              <span className="mb-1 block h-[2px] w-full bg-foreground/80" />
+              <span className="mb-1 block h-[2px] w-full bg-foreground/80" />
+              <span className="block h-[2px] w-full bg-foreground/80" />
+            </span>
+          </button>
+        </div>
+      </div>
+
       <div className="mb-4">
         <Link href="/" className="block">
           <div className="text-lg font-semibold tracking-tight">{KMW_SITE.name}</div>
