@@ -1,9 +1,0 @@
-{
-  "version": 2,
-  "builds": [
-    {
-      "src": "KnowledgeforModernWebsites/my-app/package.json",
-      "use": "@vercel/next"
-    }
-  ]
-}
