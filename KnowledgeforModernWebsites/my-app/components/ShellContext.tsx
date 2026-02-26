@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
 
 type ShellContextValue = {
   sidebarOpen: boolean;
@@ -12,6 +12,12 @@ const ShellContext = createContext<ShellContextValue | null>(null);
 
 export function ShellProvider({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
+
+  useEffect(() => {
+    // Mobile default: đóng menu để nội dung rộng rãi hơn.
+    // Desktop default: mở menu.
+    setSidebarOpen(window.matchMedia("(min-width: 768px)").matches);
+  }, []);
 
   const value = useMemo<ShellContextValue>(() => {
     return {

@@ -6,14 +6,15 @@ import { KMW_NAV, KMW_SITE } from "@/lib/kmwNav";
 import { useShell } from "@/components/ShellContext";
 
 export default function SidebarNav() {
-  const { sidebarOpen } = useShell();
+  const { sidebarOpen, setSidebarOpen } = useShell();
 
   return (
     <aside
       className={
-        sidebarOpen
-          ? "fixed inset-y-0 left-0 z-20 hidden h-screen w-[340px] overflow-y-auto border-r border-foreground/10 bg-background p-4 md:block"
-          : "hidden"
+        "fixed inset-y-0 left-0 z-40 h-screen w-[340px] max-w-[85vw] overflow-y-auto border-r border-foreground/10 bg-background p-4 transition-transform duration-200 ease-out md:max-w-none " +
+        (sidebarOpen
+          ? "translate-x-0"
+          : "-translate-x-full pointer-events-none")
       }
     >
       <div className="mb-4">
@@ -34,6 +35,11 @@ export default function SidebarNav() {
                 <li key={topic.slug}>
                   <Link
                     href={`/${category.slug}/${topic.slug}`}
+                    onClick={() => {
+                      if (window.matchMedia("(max-width: 767px)").matches) {
+                        setSidebarOpen(false);
+                      }
+                    }}
                     className="block rounded-md px-2 py-1 text-sm text-foreground/80 hover:bg-foreground/5 hover:text-foreground"
                   >
                     {topic.label}
