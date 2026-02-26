@@ -11,7 +11,7 @@ export default function SidebarNav() {
   return (
     <aside
       className={
-        "fixed inset-y-0 left-0 z-40 h-screen w-[340px] max-w-[85vw] overflow-y-auto border-r border-foreground/10 bg-background p-4 transition-transform duration-200 ease-out md:max-w-none " +
+        "fixed inset-y-0 left-0 z-[60] h-screen w-[340px] max-w-[85vw] overflow-y-auto border-r border-foreground/10 bg-background p-4 transition-transform duration-200 ease-out md:max-w-none " +
         (sidebarOpen
           ? "translate-x-0"
           : "-translate-x-full pointer-events-none")

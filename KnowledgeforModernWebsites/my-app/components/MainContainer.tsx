@@ -10,12 +10,12 @@ export default function MainContainer({ children }: { children: React.ReactNode 
     <main
       className={
         sidebarOpen
-          ? "min-w-0 flex-1 pt-[92px] md:pl-[340px]"
-          : "min-w-0 flex-1 pt-[92px]"
+          ? "min-w-0 flex-1 pt-[calc(var(--kmw-header-h)+var(--kmw-header-gap))] md:pl-[340px]"
+          : "min-w-0 flex-1 pt-[calc(var(--kmw-header-h)+var(--kmw-header-gap))]"
       }
     >
-      <div className="min-h-[calc(100vh-92px)]">
-        <div className="flex min-h-[calc(100vh-92px)] flex-col">
+      <div className="min-h-[calc(100vh-var(--kmw-header-h)-var(--kmw-header-gap))]">
+        <div className="flex min-h-[calc(100vh-var(--kmw-header-h)-var(--kmw-header-gap))] flex-col">
           <div className="flex-1">{children}</div>
           <Footer />
         </div>

@@ -3,6 +3,8 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  --kmw-header-h: 92px;
+  --kmw-header-gap: 12px;
 }
 
 @theme inline {
